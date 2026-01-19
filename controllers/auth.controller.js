@@ -21,7 +21,7 @@ const register = async (req, res) => {
         email,
         password: hash,
         provider: "local",
-        picture: `https://avatar.iran.liara.run/username?username=${name}`,
+        picture: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
       });
 
       const token = jwt.sign(
