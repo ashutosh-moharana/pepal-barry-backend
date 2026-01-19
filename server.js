@@ -18,7 +18,12 @@ app.use(express.json());
 app.use(cookieParser());
 
 // Security Middleware
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow resource loading from other origins (like avatars)
+  })
+);
 
 const limiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
