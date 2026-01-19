@@ -1,6 +1,6 @@
 const cloudinary = require("../config/cloudinary");
 
-const uploadToCloudinary = (fileBuffer, folder = "nutri-bite-products") => {
+const uploadToCloudinary = (fileBuffer, folder = "pepal-barry-products") => {
     return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
             {

@@ -10,6 +10,9 @@ const { errorHandler } = require("./middleware/errorMiddleware");
 dotenv.config();
 const app = express();
 
+// Trust the first proxy (Render/Heroku/etc)
+app.set("trust proxy", 1);
+
 // Middleware
 app.use(express.json());
 app.use(cookieParser());
