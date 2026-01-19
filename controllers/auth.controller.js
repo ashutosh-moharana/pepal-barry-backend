@@ -11,7 +11,7 @@ const register = async (req, res) => {
 
   let user = await User.findOne({ email });
   if (user) {
-    res.status(400).json({ success: false, message: "User already exists." });
+    return res.status(400).json({ success: false, message: "User already exists." });
   }
 
   bcrypt.genSalt(saltRounds, function (err, salt) {
@@ -31,46 +31,46 @@ const register = async (req, res) => {
 
       res.cookie("token", token, {
         httpOnly: true,
-        secure: false, 
-        sameSite: "lax", 
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
         maxAge: 24 * 60 * 60 * 1000, // 1 day
       });
 
-      res.status(200).json({success:true,message:"User registered successfully", user:createdUser,token});
+      res.status(200).json({ success: true, message: "User registered successfully", user: createdUser, token });
     });
   });
- 
+
 };
 
 const login = async (req, res) => {
- const { email, password } = req.body;
+  const { email, password } = req.body;
 
   const user = await User.findOne({ email });
   if (!user) {
-    res.status(400).json({ success: false, message: "User is not registered!" });
+    return res.status(400).json({ success: false, message: "User is not registered!" });
   }
 
 
-    bcrypt.compare(password, user.password , async function (err, result) {
-      if(!result){
-        res.status(400).json({ success: false, message: "Wrong Credentials" })
-      }
-      const token = jwt.sign(
-        { userId: user._id, email: user.email },
-        process.env.JWT_SECRET
-      );
+  bcrypt.compare(password, user.password, async function (err, result) {
+    if (!result) {
+      return res.status(400).json({ success: false, message: "Wrong Credentials" })
+    }
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      process.env.JWT_SECRET
+    );
 
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: false, 
-        sameSite: "lax", 
-        maxAge: 24 * 60 * 60 * 1000, // 1 day
-      });
-
-      res.status(200).json({success:true,message:"User logged in successfully", user,token});
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
     });
 
- 
+    res.status(200).json({ success: true, message: "User logged in successfully", user, token });
+  });
+
+
 };
 
 const client = new OAuth2Client(
@@ -110,7 +110,7 @@ const googleLogin = async (req, res) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: false, // must be false for localhost (not https)
+      secure: process.env.NODE_ENV === "production", // must be false for localhost (not https)
       sameSite: "lax", // controls cross-site behavior
       maxAge: 24 * 60 * 60 * 1000, // 1 day
     });

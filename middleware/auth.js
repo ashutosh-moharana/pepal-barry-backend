@@ -27,6 +27,7 @@ module.exports = async function auth(req, res, next) {
     next();
   } catch (error) {
     console.error("Auth middleware error", error);
+    res.clearCookie("token");
     res.status(401).json({ success: false, message: "Invalid token" });
   }
 };

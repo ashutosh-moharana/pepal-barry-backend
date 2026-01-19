@@ -3,8 +3,25 @@ const cors = require("cors");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
 const connectDB = require("./config/db");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const { errorHandler } = require("./middleware/errorMiddleware");
+
 dotenv.config();
 const app = express();
+
+// Middleware
+app.use(express.json());
+app.use(cookieParser());
+
+// Security Middleware
+app.use(helmet());
+
+const limiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
 
 app.use(
   cors({
@@ -12,8 +29,6 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
-app.use(cookieParser());
 connectDB();
 
 app.get("/", (req, res) => {
@@ -25,6 +40,8 @@ app.use("/api/products", require("./routes/products.route"));
 app.use("/api/orders", require("./routes/orders.route"));
 
 const PORT = process.env.PORT || 5000;
+app.use(errorHandler);
+
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
