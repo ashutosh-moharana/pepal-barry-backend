@@ -31,12 +31,25 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+const allowedOrigins = [
+  "https://pepalbarry.shop",
+  "https://www.pepalbarry.shop",
+  process.env.CLIENT_URL
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS not allowed"));
+      }
+    },
     credentials: true,
   })
 );
+
 connectDB();
 
 app.get("/", (req, res) => {
@@ -49,15 +62,6 @@ app.use("/api/orders", require("./routes/orders.route"));
 
 const PORT = process.env.PORT || 5000;
 const path = require("path");
-
-// Serve static files from the React client
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "../client/dist")));
-
-  app.get(/(.*)/, (req, res) => {
-    res.sendFile(path.resolve(__dirname, "../client", "dist", "index.html"));
-  });
-}
 
 app.use(errorHandler);
 
