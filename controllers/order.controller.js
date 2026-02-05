@@ -28,9 +28,7 @@ const createCODOrder = async (req, res) => {
 
     order = await order.populate("products.productId");
 
-    await User.findByIdAndUpdate(req.user.userId, {
-      $addToSet: { orders: order._id },
-    });
+
 
     res.status(201).json({ success: true, order });
   } catch (error) {
@@ -76,9 +74,7 @@ const createRazorpayOrder = async (req, res) => {
       mode: "Razorpay",
     });
 
-    await User.findByIdAndUpdate(req.user.userId, {
-      $addToSet: { orders: order._id },
-    });
+
 
     res.status(201).json({
       success: true,
