@@ -7,54 +7,62 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 
 const register = async (req, res) => {
-  const { name, email, password } = req.body;
+  try {
+    const { name, email, password } = req.body;
 
-  let user = await User.findOne({ email });
-  if (user) {
-    return res.status(400).json({ success: false, message: "User already exists." });
-  }
+    let user = await User.findOne({ email });
+    if (user) {
+      return res.status(400).json({ success: false, message: "User already exists." });
+    }
 
-  bcrypt.genSalt(saltRounds, function (err, salt) {
-    bcrypt.hash(password, salt, async function (err, hash) {
-      const createdUser = await User.create({
-        name,
-        email,
-        password: hash,
-        provider: "local",
-        picture: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
-      });
+    const salt = await bcrypt.genSalt(saltRounds);
+    const hash = await bcrypt.hash(password, salt);
 
-      const token = jwt.sign(
-        { userId: createdUser._id, email: createdUser.email },
-        process.env.JWT_SECRET
-      );
-
-      res.cookie("token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 24 * 60 * 60 * 1000, // 1 day
-      });
-
-      res.status(200).json({ success: true, message: "User registered successfully", user: createdUser, token });
+    const createdUser = await User.create({
+      name,
+      email,
+      password: hash,
+      provider: "local",
+      picture: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}`,
     });
-  });
 
+    const token = jwt.sign(
+      { userId: createdUser._id, email: createdUser.email },
+      process.env.JWT_SECRET
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+    });
+
+    res.status(200).json({ success: true, message: "User registered successfully", user: createdUser });
+  } catch (error) {
+    console.error("Registration error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 
 const login = async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const user = await User.findOne({ email });
-  if (!user) {
-    return res.status(400).json({ success: false, message: "User is not registered!" });
-  }
-
-
-  bcrypt.compare(password, user.password, async function (err, result) {
-    if (!result) {
-      return res.status(400).json({ success: false, message: "Wrong Credentials" })
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ success: false, message: "User is not registered!" });
     }
+
+    if (user.provider !== "local" || !user.password) {
+      return res.status(400).json({ success: false, message: "This account was created with Google. Please use 'Continue with Google'." });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: "Wrong Credentials" });
+    }
+
     const token = jwt.sign(
       { userId: user._id, email: user.email },
       process.env.JWT_SECRET
@@ -67,10 +75,11 @@ const login = async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000, // 1 day
     });
 
-    res.status(200).json({ success: true, message: "User logged in successfully", user, token });
-  });
-
-
+    res.status(200).json({ success: true, message: "User logged in successfully", user });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
 
 const client = new OAuth2Client(
@@ -81,7 +90,6 @@ const client = new OAuth2Client(
 
 const googleLogin = async (req, res) => {
   const { code } = req.body;
-  console.log(code);
   try {
     const { tokens } = await client.getToken(code);
     const idToken = tokens.id_token;
@@ -100,7 +108,15 @@ const googleLogin = async (req, res) => {
         email,
         picture,
         googleId,
+        provider: "google",
       });
+    } else if (!user.googleId) {
+      // Link Google account to existing email/password account
+      user.googleId = googleId;
+      if (user.picture && user.picture.includes("ui-avatars.com")) {
+        user.picture = picture;
+      }
+      await user.save();
     }
 
     const token = jwt.sign(
@@ -110,16 +126,21 @@ const googleLogin = async (req, res) => {
 
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // must be false for localhost (not https)
-      sameSite: "lax", // controls cross-site behavior
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000, // 1 day
     });
 
-    res.status(200).json({ user, token });
+    res.status(200).json({ success: true, message: "Logged in with Google", user });
   } catch (err) {
-    console.log(err);
+    console.error("Google login error:", err);
     res.status(500).json({ success: false, message: "Google login failed" });
   }
 };
 
-module.exports = { register, login, googleLogin };
+const logoutUser = (req, res) => {
+  res.clearCookie("token");
+  res.status(200).json({ success: true, message: "Logged out successfully" });
+};
+
+module.exports = { register, login, googleLogin, logoutUser };

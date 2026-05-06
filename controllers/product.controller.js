@@ -1,5 +1,5 @@
 const Product = require('../models/product.model');
-const { uploadToCloudinary } = require("../utils/uploadUtils");
+const { uploadToCloudinary, deleteFromCloudinary } = require("../utils/uploadUtils");
 
 
 const getAllProducts = async (req, res) => {
@@ -60,6 +60,12 @@ const updateProduct = async (req, res) => {
     if (req.files && req.files.length > 0) {
       const uploadPromises = req.files.map((file) => uploadToCloudinary(file.buffer));
       updateData.images = await Promise.all(uploadPromises);
+
+      // Clean up old images
+      const oldProduct = await Product.findById(req.params.id);
+      if (oldProduct && oldProduct.images) {
+        oldProduct.images.forEach((img) => deleteFromCloudinary(img));
+      }
     }
 
     const product = await Product.findByIdAndUpdate(req.params.id, updateData, {
@@ -82,6 +88,11 @@ const deleteProduct = async (req, res) => {
     const product = await Product.findByIdAndDelete(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
+    }
+    
+    // Delete images from Cloudinary
+    if (product.images && product.images.length > 0) {
+      product.images.forEach((img) => deleteFromCloudinary(img));
     }
     res.status(200).json({ success: true, message: "Product deleted" });
   } catch (error) {
