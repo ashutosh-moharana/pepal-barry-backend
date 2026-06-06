@@ -1,16 +1,28 @@
 const Product = require('../models/product.model');
 const { uploadToCloudinary, deleteFromCloudinary } = require("../utils/uploadUtils");
+const { logAdminAction } = require("../utils/auditLogger");
 
 
 const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find({});
-    res.status(200).json({ success: true, products });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (req.query.category) query.category = req.query.category;
+    if (req.query.q) {
+      query.name = { $regex: req.query.q, $options: "i" };
+    }
+
+    const total = await Product.countDocuments(query);
+    const products = await Product.find(query).skip(skip).limit(limit);
+
+    res.status(200).json({ success: true, products, page, totalPages: Math.ceil(total/limit), total });
   } catch (error) {
     console.log("Error in fetching products: ", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
-
 }
 
 const getProductById = async (req, res) => {
@@ -45,6 +57,10 @@ const createProduct = async (req, res) => {
       images,
     });
 
+    if (req.user) {
+      logAdminAction(req.user.userId, "CREATE_PRODUCT", product._id, { name });
+    }
+
     res.status(201).json({ success: true, product });
   } catch (error) {
     console.error("Error creating product:", error);
@@ -76,6 +92,10 @@ const updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
+    if (req.user) {
+      logAdminAction(req.user.userId, "UPDATE_PRODUCT", product._id, updateData);
+    }
+
     res.status(200).json({ success: true, product });
   } catch (error) {
     console.error("Error updating product:", error);
@@ -94,6 +114,11 @@ const deleteProduct = async (req, res) => {
     if (product.images && product.images.length > 0) {
       product.images.forEach((img) => deleteFromCloudinary(img));
     }
+
+    if (req.user) {
+      logAdminAction(req.user.userId, "DELETE_PRODUCT", product._id, { name: product.name });
+    }
+
     res.status(200).json({ success: true, message: "Product deleted" });
   } catch (error) {
     console.error("Error deleting product:", error);

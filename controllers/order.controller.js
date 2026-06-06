@@ -3,6 +3,7 @@ const Order = require("../models/order.model");
 const User = require("../models/user.model");
 const Product = require("../models/product.model");
 const razorpay = require("../config/razorpay");
+const { logAdminAction } = require("../utils/auditLogger");
 
 const buildProductsPayload = (products = []) =>
   products.map((item) => ({
@@ -20,10 +21,17 @@ const createCODOrder = async (req, res) => {
     }
 
     let calculatedTotalAmount = 0;
+    const finalProducts = [];
     for (const item of products) {
       const product = await Product.findById(item.productId);
       if (product) {
-        calculatedTotalAmount += product.price * Math.max(1, Number(item.quantity) || 1);
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        calculatedTotalAmount += product.price * qty;
+        finalProducts.push({
+          productId: item.productId,
+          quantity: qty,
+          priceAtPurchase: product.price,
+        });
       }
     }
 
@@ -31,9 +39,13 @@ const createCODOrder = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid products in order" });
     }
 
+    if (req.body.totalAmount !== undefined && calculatedTotalAmount !== Number(req.body.totalAmount)) {
+      return res.status(400).json({ success: false, message: "Total amount mismatch. Order rejected." });
+    }
+
     let order = await Order.create({
       user: req.user.userId,
-      products: buildProductsPayload(products),
+      products: finalProducts,
       totalAmount: calculatedTotalAmount,
       shippingAddress: address,
       mode: "Cash On Delivery",
@@ -60,15 +72,26 @@ const createRazorpayOrder = async (req, res) => {
     }
 
     let calculatedTotalAmount = 0;
+    const finalProducts = [];
     for (const item of products) {
       const product = await Product.findById(item.productId);
       if (product) {
-        calculatedTotalAmount += product.price * Math.max(1, Number(item.quantity) || 1);
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        calculatedTotalAmount += product.price * qty;
+        finalProducts.push({
+          productId: item.productId,
+          quantity: qty,
+          priceAtPurchase: product.price,
+        });
       }
     }
 
     if (calculatedTotalAmount === 0) {
       return res.status(400).json({ success: false, message: "Invalid products in order" });
+    }
+
+    if (req.body.totalAmount !== undefined && calculatedTotalAmount !== Number(req.body.totalAmount)) {
+      return res.status(400).json({ success: false, message: "Total amount mismatch. Order rejected." });
     }
 
     const amountInPaise = Math.round(calculatedTotalAmount * 100);
@@ -87,11 +110,13 @@ const createRazorpayOrder = async (req, res) => {
         currency: "INR",
         receipt: `pepalbarry_${Date.now()}`,
       });
+    } else {
+      console.warn("WARNING: Razorpay keys missing. Running payment in demo mode.");
     }
 
     const order = await Order.create({
       user: req.user.userId,
-      products: buildProductsPayload(products),
+      products: finalProducts,
       totalAmount: calculatedTotalAmount,
       shippingAddress: address,
       razorpayOrderId: razorpayOrder.id,
@@ -140,8 +165,13 @@ const verifyRazorpayPayment = async (req, res) => {
       }
     }
 
+    const query = { _id: orderId, razorpayOrderId: razorpay_order_id };
+    if (req.user.role !== "admin") {
+      query.user = req.user.userId;
+    }
+
     const order = await Order.findOneAndUpdate(
-      { _id: orderId, razorpayOrderId: razorpay_order_id, user: req.user.userId },
+      query,
       {
         paymentStatus: "paid",
         razorpayPaymentId: razorpay_payment_id,
@@ -182,16 +212,32 @@ const getUserOrders = async (req, res) => {
 
 const getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find({
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const query = {
       $or: [
         { mode: "Cash On Delivery" },
         { mode: "Razorpay", paymentStatus: "paid" },
       ],
-    })
+    };
+
+    if (req.query.status) query.deliveryStatus = req.query.status;
+    if (req.query.paymentStatus) query.paymentStatus = req.query.paymentStatus;
+    if (req.query.q && req.query.q.length === 24) {
+      query._id = req.query.q;
+    }
+
+    const total = await Order.countDocuments(query);
+    const orders = await Order.find(query)
       .populate("products.productId")
       .populate("user", "name email")
-      .sort({ createdAt: -1 });
-    res.status(200).json({ success: true, orders });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.status(200).json({ success: true, orders, page, totalPages: Math.ceil(total/limit), total });
   } catch (error) {
     console.error("Fetching all orders failed", error);
     res.status(500).json({ success: false, message: "Server error" });
@@ -216,6 +262,8 @@ const updateOrderStatus = async (req, res) => {
       return res.status(404).json({ success: false, message: "Order not found" });
     }
 
+    logAdminAction(req.user.userId, "UPDATE_ORDER_STATUS", order._id, updateData);
+
     res.status(200).json({ success: true, order });
   } catch (error) {
     console.error("Updating order status failed", error);
@@ -236,7 +284,7 @@ const handleRazorpayWebhook = async (req, res) => {
 
     const generatedSignature = crypto
       .createHmac("sha256", secret)
-      .update(req.rawBody || JSON.stringify(req.body))
+      .update(req.body)
       .digest("hex");
 
     if (generatedSignature !== signature) {

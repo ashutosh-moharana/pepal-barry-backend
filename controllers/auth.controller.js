@@ -29,7 +29,7 @@ const register = async (req, res) => {
     const token = jwt.sign(
       { userId: createdUser._id, email: createdUser.email },
       process.env.JWT_SECRET,
-      { expiresIn: "14d" }
+      { expiresIn: "7d" }
     );
 
     res.cookie("token", token, {
@@ -40,7 +40,7 @@ const register = async (req, res) => {
     });
 
     const { password: _, ...userWithoutPassword } = createdUser.toObject();
-    res.status(200).json({ success: true, message: "User registered successfully", user: userWithoutPassword });
+    res.status(200).json({ success: true, user: userWithoutPassword });
   } catch (error) {
     console.error("Registration error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -68,7 +68,7 @@ const login = async (req, res) => {
     const token = jwt.sign(
       { userId: user._id, email: user.email },
       process.env.JWT_SECRET,
-      { expiresIn: "14d" }
+      { expiresIn: "7d" }
     );
 
     res.cookie("token", token, {
@@ -79,7 +79,7 @@ const login = async (req, res) => {
     });
 
     const { password: _, ...userWithoutPassword } = user.toObject();
-    res.status(200).json({ success: true, message: "User logged in successfully", user: userWithoutPassword });
+    res.status(200).json({ success: true, user: userWithoutPassword });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -126,7 +126,7 @@ const googleLogin = async (req, res) => {
     const token = jwt.sign(
       { userId: user._id, email: user.email },
       process.env.JWT_SECRET,
-      { expiresIn: "14d" }
+      { expiresIn: "7d" }
     );
 
     res.cookie("token", token, {
@@ -137,7 +137,7 @@ const googleLogin = async (req, res) => {
     });
 
     const { password: _, ...userWithoutPassword } = user.toObject();
-    res.status(200).json({ success: true, message: "Logged in with Google", user: userWithoutPassword });
+    res.status(200).json({ success: true, user: userWithoutPassword });
   } catch (err) {
     console.error("Google login error:", err);
     res.status(500).json({ success: false, message: "Google login failed" });

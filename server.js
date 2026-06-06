@@ -14,11 +14,8 @@ const app = express();
 app.set("trust proxy", 1);
 
 // Middleware
-app.use(express.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf;
-  }
-}));
+app.use("/api/orders/webhook", express.raw({ type: "application/json" }));
+app.use(express.json());
 app.use(cookieParser());
 
 // Security Middleware
