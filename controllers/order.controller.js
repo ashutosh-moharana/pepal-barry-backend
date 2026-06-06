@@ -11,6 +11,16 @@ const buildProductsPayload = (products = []) =>
     quantity: Math.max(1, Number(item.quantity) || 1),
   }));
 
+const getEffectivePrice = (product) => {
+  if (product.discountPrice && product.discountPrice > 0) {
+    return product.discountPrice;
+  }
+  if (product.discountPercent && product.discountPercent > 0) {
+    return product.price - (product.price * product.discountPercent) / 100;
+  }
+  return product.price;
+};
+
 const createCODOrder = async (req, res) => {
   try {
     const { products, address } = req.body;
@@ -26,11 +36,12 @@ const createCODOrder = async (req, res) => {
       const product = await Product.findById(item.productId);
       if (product) {
         const qty = Math.max(1, Number(item.quantity) || 1);
-        calculatedTotalAmount += product.price * qty;
+        const effectivePrice = getEffectivePrice(product);
+        calculatedTotalAmount += effectivePrice * qty;
         finalProducts.push({
           productId: item.productId,
           quantity: qty,
-          priceAtPurchase: product.price,
+          priceAtPurchase: effectivePrice,
         });
       }
     }
@@ -77,11 +88,12 @@ const createRazorpayOrder = async (req, res) => {
       const product = await Product.findById(item.productId);
       if (product) {
         const qty = Math.max(1, Number(item.quantity) || 1);
-        calculatedTotalAmount += product.price * qty;
+        const effectivePrice = getEffectivePrice(product);
+        calculatedTotalAmount += effectivePrice * qty;
         finalProducts.push({
           productId: item.productId,
           quantity: qty,
-          priceAtPurchase: product.price,
+          priceAtPurchase: effectivePrice,
         });
       }
     }

@@ -40,7 +40,14 @@ const getProductById = async (req, res) => {
 
 const createProduct = async (req, res) => {
   try {
-    const { name, description, price, stock, category } = req.body;
+    const { name, description, price, stock, category, discountPercent, discountPrice } = req.body;
+
+    let dPercent = discountPercent ? Number(discountPercent) : 0;
+    let dPrice = discountPrice ? Number(discountPrice) : 0;
+    
+    if (dPrice > 0 && dPrice >= Number(price)) {
+      return res.status(400).json({ success: false, message: "Discount price must be less than the original price" });
+    }
 
     let images = [];
     if (req.files && req.files.length > 0) {
@@ -52,6 +59,8 @@ const createProduct = async (req, res) => {
       name,
       description,
       price,
+      discountPercent: dPercent,
+      discountPrice: dPrice,
       stock,
       category,
       images,
@@ -70,8 +79,16 @@ const createProduct = async (req, res) => {
 
 const updateProduct = async (req, res) => {
   try {
-    const { name, description, price, stock, category } = req.body;
-    const updateData = { name, description, price, stock, category };
+    const { name, description, price, stock, category, discountPercent, discountPrice } = req.body;
+    
+    let dPercent = discountPercent ? Number(discountPercent) : 0;
+    let dPrice = discountPrice ? Number(discountPrice) : 0;
+
+    if (dPrice > 0 && dPrice >= Number(price)) {
+      return res.status(400).json({ success: false, message: "Discount price must be less than the original price" });
+    }
+
+    const updateData = { name, description, price, stock, category, discountPercent: dPercent, discountPrice: dPrice };
 
     if (req.files && req.files.length > 0) {
       const uploadPromises = req.files.map((file) => uploadToCloudinary(file.buffer));
