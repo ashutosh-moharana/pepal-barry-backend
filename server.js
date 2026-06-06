@@ -63,7 +63,7 @@ app.use("/api/orders", require("./routes/orders.route"));
 app.use("/api/newsletter", require("./routes/newsletter.route"));
 
 const PORT = process.env.PORT || 5000;
-const path = require("path");
+
 
 app.use(errorHandler);
 

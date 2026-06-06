@@ -1,6 +1,5 @@
 const Product = require('../models/product.model');
 const { uploadToCloudinary, deleteFromCloudinary } = require("../utils/uploadUtils");
-const { logAdminAction } = require("../utils/auditLogger");
 
 
 const getAllProducts = async (req, res) => {
@@ -12,7 +11,8 @@ const getAllProducts = async (req, res) => {
     const query = {};
     if (req.query.category) query.category = req.query.category;
     if (req.query.q) {
-      query.name = { $regex: req.query.q, $options: "i" };
+      const escaped = req.query.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.name = { $regex: escaped, $options: "i" };
     }
 
     const total = await Product.countDocuments(query);
@@ -66,10 +66,6 @@ const createProduct = async (req, res) => {
       images,
     });
 
-    if (req.user) {
-      logAdminAction(req.user.userId, "CREATE_PRODUCT", product._id, { name });
-    }
-
     res.status(201).json({ success: true, product });
   } catch (error) {
     console.error("Error creating product:", error);
@@ -109,10 +105,6 @@ const updateProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
 
-    if (req.user) {
-      logAdminAction(req.user.userId, "UPDATE_PRODUCT", product._id, updateData);
-    }
-
     res.status(200).json({ success: true, product });
   } catch (error) {
     console.error("Error updating product:", error);
@@ -130,10 +122,6 @@ const deleteProduct = async (req, res) => {
     // Delete images from Cloudinary
     if (product.images && product.images.length > 0) {
       product.images.forEach((img) => deleteFromCloudinary(img));
-    }
-
-    if (req.user) {
-      logAdminAction(req.user.userId, "DELETE_PRODUCT", product._id, { name: product.name });
     }
 
     res.status(200).json({ success: true, message: "Product deleted" });
