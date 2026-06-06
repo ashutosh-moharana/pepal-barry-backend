@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const Order = require("../models/order.model");
 const User = require("../models/user.model");
+const Product = require("../models/product.model");
 const razorpay = require("../config/razorpay");
 
 const buildProductsPayload = (products = []) =>
@@ -11,17 +12,29 @@ const buildProductsPayload = (products = []) =>
 
 const createCODOrder = async (req, res) => {
   try {
-    const { products, totalAmount, address } = req.body;
-    if (!products?.length || !totalAmount || !address) {
+    const { products, address } = req.body;
+    if (!products?.length || !address) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid order payload" });
     }
 
+    let calculatedTotalAmount = 0;
+    for (const item of products) {
+      const product = await Product.findById(item.productId);
+      if (product) {
+        calculatedTotalAmount += product.price * Math.max(1, Number(item.quantity) || 1);
+      }
+    }
+
+    if (calculatedTotalAmount === 0) {
+      return res.status(400).json({ success: false, message: "Invalid products in order" });
+    }
+
     let order = await Order.create({
       user: req.user.userId,
       products: buildProductsPayload(products),
-      totalAmount,
+      totalAmount: calculatedTotalAmount,
       shippingAddress: address,
       mode: "Cash On Delivery",
     });
@@ -39,14 +52,26 @@ const createCODOrder = async (req, res) => {
 
 const createRazorpayOrder = async (req, res) => {
   try {
-    const { products, totalAmount, address } = req.body;
-    if (!products?.length || !totalAmount || !address) {
+    const { products, address } = req.body;
+    if (!products?.length || !address) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid order payload" });
     }
 
-    const amountInPaise = Math.round(totalAmount * 100);
+    let calculatedTotalAmount = 0;
+    for (const item of products) {
+      const product = await Product.findById(item.productId);
+      if (product) {
+        calculatedTotalAmount += product.price * Math.max(1, Number(item.quantity) || 1);
+      }
+    }
+
+    if (calculatedTotalAmount === 0) {
+      return res.status(400).json({ success: false, message: "Invalid products in order" });
+    }
+
+    const amountInPaise = Math.round(calculatedTotalAmount * 100);
     const isDemoMode =
       !process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET;
 
@@ -67,7 +92,7 @@ const createRazorpayOrder = async (req, res) => {
     const order = await Order.create({
       user: req.user.userId,
       products: buildProductsPayload(products),
-      totalAmount,
+      totalAmount: calculatedTotalAmount,
       shippingAddress: address,
       razorpayOrderId: razorpayOrder.id,
       paymentStatus: "pending",
@@ -116,7 +141,7 @@ const verifyRazorpayPayment = async (req, res) => {
     }
 
     const order = await Order.findOneAndUpdate(
-      { _id: orderId, razorpayOrderId: razorpay_order_id },
+      { _id: orderId, razorpayOrderId: razorpay_order_id, user: req.user.userId },
       {
         paymentStatus: "paid",
         razorpayPaymentId: razorpay_payment_id,
@@ -211,7 +236,7 @@ const handleRazorpayWebhook = async (req, res) => {
 
     const generatedSignature = crypto
       .createHmac("sha256", secret)
-      .update(JSON.stringify(req.body))
+      .update(req.rawBody || JSON.stringify(req.body))
       .digest("hex");
 
     if (generatedSignature !== signature) {
